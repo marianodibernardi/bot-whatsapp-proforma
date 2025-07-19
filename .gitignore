@@ -1,0 +1,22 @@
+# 🔐 Claves y configuración
+.env
+
+# 🐍 Entorno virtual de Python
+env/
+venv/
+
+# 🧠 Cachés de Python
+__pycache__/
+*.pyc
+
+# 🐳 Archivos temporales de Docker (si los hubiera)
+*.log
+*.pid
+*.sqlite
+
+# 🧪 Pruebas o resultados
+*.json
+*.csv
+*.pdf
+*.docx
+resultados/

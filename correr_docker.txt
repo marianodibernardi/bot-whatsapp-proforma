@@ -1,0 +1,31 @@
+1-
+-- Crear imagen
+docker build --no-cache -t flask-ngrok-app .
+
+2-
+-- Listar Dockers
+docker ps
+
+3-
+Si existen dockers:
+        |______Detener y eliminar dockers: 
+                docker stop tender_jepsen
+                docker rm tender_jepsen
+
+4-
+-- Correr docker con imagen nueva
+docker run -p 5000:5000 -p 4040:4040 flask-ngrok-app
+
+-- Listar Docker nuevo
+docker ps
+
+-- Entrar al docker
+docker exec -it great_lovelace /bin/bash
+
+-- Ver los logs del docker para obtener la url
+cat /tmp/ngrok.log
+
+
+---------- Depuracion -------------------------
+-- Ver resultados de docker (afuera del docker)
+docker logs tender_jepsen
