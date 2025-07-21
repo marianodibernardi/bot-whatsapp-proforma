@@ -25,16 +25,15 @@ STATE_ROUTER = {
     "esperando_confirmacion": handle_confirmacion_factura
 }
 
-
-def handle_text_message(data, modo_local=False):
-    from_number_raw = data.get("From")
-    from_number = from_number_raw.replace("whatsapp:", "")
-    body = data.get("Body", "").strip().lower()
-    log(f"📩 Mensaje recibido de: {from_number_raw} (normalizado: {from_number}): {body}")
+def handle_text_message(message):
+    from_number = message["from"]
+    body = message.get("text", {}).get("body", "").strip().lower()
+    
+    log(f"📩 Mensaje recibido de {from_number}: {body}")
 
     if body == "hola":
         reply = (
-            f"👋 Hola! ¿Qué querés hacer?\n"
+            f"👋 ¡Hola! ¿Qué querés hacer?\n"
             "1️⃣ Ver proformas pendientes\n"
             "2️⃣ Consultar estado de una factura"
         )
@@ -65,8 +64,4 @@ def handle_text_message(data, modo_local=False):
     if proforma_seleccionada:
         log(f"📌 Proforma seleccionada: {proforma_seleccionada}")
 
-    if modo_local:
-        print(f"\n🤖 Bot: {reply}\n")
-    else:
-        from flask import Response
-        return Response(f"<Response><Message>{reply}</Message></Response>", mimetype="text/xml")
+    return reply  # Solo texto plano, será enviado por `enviar_respuesta()` en webhook.py

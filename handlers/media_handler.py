@@ -1,43 +1,46 @@
-import uuid
 import os
+import uuid
 import requests
-from flask import Response
-from requests.auth import HTTPBasicAuth
-
-from services.factura_processor import procesar_factura
 from utils.logger import log
 from utils.state_manager import get_state, set_state
 from utils.context import user_session
+from services.factura_processor import procesar_factura
 
-# Estas credenciales las podés mover a variables de entorno más adelante
-account_sid = 'ACb08036fde0ec3f76d3acc7e9985687cb'
-auth_token = '87faa70744cd4c4154968c2e8cd3e281'
-
-def handle_media_message(data):
-    from_number_raw = data.get("From")
-    from_number = from_number_raw.replace("whatsapp:", "")
+def handle_media_message(message, access_token):
+    from_number = message["from"]
     state = get_state(from_number)
     log(f"📥 Estado actual al recibir archivo: {state}")
 
-    if data.get("MediaContentType0") != "application/pdf":
-        reply = "📎 El archivo debe ser un PDF."
+    # Solo aceptamos PDF enviados como documentos
+    if message.get("type") != "document" or message["document"].get("mime_type") != "application/pdf":
+        reply = "📎 El archivo debe ser un PDF adjunto como documento."
         set_state(from_number, "inicio")
-        return Response(f"<Response><Message>{reply}</Message></Response>", mimetype="text/xml")
+        return reply
 
     if state != "esperando_factura_pdf":
         reply = "📎 Recibí un archivo, pero no lo estaba esperando. Escribí *hola* para comenzar."
         set_state(from_number, "inicio")
-        return Response(f"<Response><Message>{reply}</Message></Response>", mimetype="text/xml")
+        return reply
 
     try:
-        media_url = data["MediaUrl0"]
-        log(f"📎 Descargando archivo desde: {media_url}")
-        response = requests.get(media_url, auth=HTTPBasicAuth(account_sid, auth_token))
+        media_id = message["document"]["id"]
+        log(f"📎 Media ID recibido: {media_id}")
 
+        # Paso 1: Obtener la URL de descarga desde la Graph API
+        url_info = f"https://graph.facebook.com/v19.0/{media_id}"
+        headers = {"Authorization": f"Bearer {access_token}"}
+        res_info = requests.get(url_info, headers=headers)
+        media_url = res_info.json().get("url")
+        if not media_url:
+            raise Exception("No se pudo obtener la URL del archivo.")
+
+        # Paso 2: Descargar el archivo usando esa URL
+        res_file = requests.get(media_url, headers=headers)
         nombre_archivo = f"static/facturas/{uuid.uuid4().hex}.pdf"
         with open(nombre_archivo, "wb") as f:
-            f.write(response.content)
+            f.write(res_file.content)
 
+        # Paso 3: Procesar factura
         resultado = procesar_factura(nombre_archivo)
         log(f"📊 Resultado: {resultado}")
 
@@ -45,11 +48,10 @@ def handle_media_message(data):
             reply = f"⚠️ Error al procesar factura: {resultado['error']}"
             set_state(from_number, "inicio")
         else:
-            # Guardar datos extraídos en sesión
+            # Guardar datos extraídos
             user_session[from_number] = user_session.get(from_number, {})
             user_session[from_number]["factura_extraida"] = resultado
 
-            # Armar resumen
             resumen = (
                 "✅ Factura procesada correctamente:\n"
                 f"• Tipo: {resultado.get('preTipoComprobante', '-')}\n"
@@ -64,14 +66,12 @@ def handle_media_message(data):
             reply = resumen
             set_state(from_number, "esperando_confirmacion")
 
-
-
     except Exception as e:
         log(f"❌ Error procesando archivo: {str(e)}")
         reply = "❌ Hubo un error procesando el archivo. Intentá de nuevo."
-    finally:
-        if os.path.exists(nombre_archivo):
-            os.remove(nombre_archivo)
         set_state(from_number, "inicio")
+    finally:
+        if "nombre_archivo" in locals() and os.path.exists(nombre_archivo):
+            os.remove(nombre_archivo)
 
-    return Response(f"<Response><Message>{reply}</Message></Response>", mimetype="text/xml")
+    return reply  # Retorna solo texto plano para que webhook.py lo envíe
